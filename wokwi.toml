@@ -1,0 +1,4 @@
+[wokwi]
+version = 1
+elf = "build/esp32_lab.elf"
+firmware = "build/esp32_lab.bin"
