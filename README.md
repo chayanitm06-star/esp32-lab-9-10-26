@@ -1,4 +1,4 @@
-# 🚀 Module 1 & Module 2: ESP32 Embedded Systems Lab
+# SP32 Embedded Systems Lab
 
 **น.ส.ชญานิศ ธีรเวโรจน์**   
 **รหัสนักศึกษา:** 68030349
