@@ -43,3 +43,19 @@
 เมื่อระบบเริ่มต้นทำงานและสามารถสื่อสารกับจอ LCD ผ่าน I2C บัสได้สำเร็จ จะได้รับสัญญาณตอบรับ (ACK) จากอุปกรณ์ ดังนี้:
 
 ![alt text](image-1.png)
+
+---
+
+## ⚡ Module 3: RTOS & System Architecture (Deferred Interrupt Processing)
+
+เรียนรู้การทำ **Deferred Interrupt Processing** โดยใช้ **GPIO ISR** ร่วมกับ **FreeRTOS Queue** เพื่อย้ายงานประมวลผลออกจาก Interrupt Context ไปทำใน Worker Task อย่างเป็นระบบและปลอดภัย
+
+### 🛠️ Hardware Pin Connection Mapping
+| ESP32 Pin | Peripherals | Signal Function | Config |
+| :---: | :---: | :---: | :---: |
+| **GPIO 4** | Push Button | External Hardware Interrupt | Falling Edge (`GPIO_INTR_NEGEDGE`) |
+
+### 🎯 Test Results & Execution Output
+เมื่อมีการกดปุ่มใน Simulator ตัว ISR จะส่ง Event เข้า Queue และ Worker Task จะทำการดึงข้อมูลมาแสดงผลนับจำนวนการกดดังนี้:
+
+![alt text](image-2.png)

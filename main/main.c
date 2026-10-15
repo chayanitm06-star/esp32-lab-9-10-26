@@ -1,52 +1,54 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "driver/i2c_master.h"
+#include "freertos/queue.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
 
-#define I2C_SCL_IO           GPIO_NUM_22
-#define I2C_SDA_IO           GPIO_NUM_21
-#define I2C_MASTER_FREQ_HZ   100000
-#define LCD_SLAVE_ADDR       0x27
+#define BUTTON_PIN GPIO_NUM_4
 
-static const char *TAG = "I2C_PROJECT";
+static const char *TAG = "RTOS_ISR_PROJECT";
+static QueueHandle_t gpio_evt_queue = NULL;
+
+// 1. Interrupt Service Routine placed in internal Instruction RAM (IRAM)
+static void IRAM_ATTR gpio_isr_handler(void* arg) {
+    uint32_t gpio_num = (uint32_t) arg;
+    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
+}
+
+// 2. Background Worker Consumer Thread
+static void button_worker_task(void* arg) {
+    uint32_t io_num;
+    uint32_t press_count = 0;
+    while (1) {
+        // Block indefinitely until an ISR event is pushed to the queue
+        if (xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
+            press_count++;
+            ESP_LOGI(TAG, "ISR Event Received! Button on GPIO %ld pressed %ld times.", io_num, press_count);
+        }
+    }
+}
 
 void app_main(void) {
-    ESP_LOGI(TAG, "Initializing Modern I2C Master Bus...");
+    // 3. Create FreeRTOS Queue for Event Offloading
+    gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
 
-    // 1. Define Bus Configuration Structure
-    i2c_master_bus_config_t bus_config = {
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .i2c_port = I2C_NUM_0,
-        .scl_io_num = I2C_SCL_IO,
-        .sda_io_num = I2C_SDA_IO,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
+    // 4. Spawn Consumer Task
+    xTaskCreate(button_worker_task, "button_worker_task", 2048, NULL, 10, NULL);
+
+    // 5. Configure Hardware Edge Trigger on Pin
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << BUTTON_PIN),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_NEGEDGE,
     };
+    gpio_config(&io_conf);
 
-    // 2. Instantiate Master Bus Handle
-    i2c_master_bus_handle_t bus_handle;
-    ESP_ERROR_CHECK(i2c_new_master_bus(&bus_config, &bus_handle));
+    // 6. Install Global ISR Service and Register Handler
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(BUTTON_PIN, gpio_isr_handler, (void*) BUTTON_PIN);
 
-    // 3. Register Slave Device Configuration
-    i2c_device_config_t dev_config = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = LCD_SLAVE_ADDR,
-        .scl_speed_hz = I2C_MASTER_FREQ_HZ,
-    };
-
-    i2c_master_dev_handle_t dev_handle;
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_config, &dev_handle));
-
-    ESP_LOGI(TAG, "I2C bus registered successfully. Probing slave device at address 0x27...");
-
-    // 4. Perform Data Transmission Probe
-    uint8_t init_cmd[] = { 0x08 }; // Backlight control / clear command frame
-    esp_err_t err = i2c_master_transmit(dev_handle, init_cmd, sizeof(init_cmd), 1000 / portTICK_PERIOD_MS);
-
-    if (err == ESP_OK) {
-        ESP_LOGI(TAG, "Communication success! Peripheral acknowledged transfer (ACK).");
-    } else {
-        ESP_LOGE(TAG, "Communication failed: %s", esp_err_to_name(err));
-    }
+    ESP_LOGI(TAG, "GPIO Interrupt Service Routine installed. Waiting for hardware button presses...");
 }
